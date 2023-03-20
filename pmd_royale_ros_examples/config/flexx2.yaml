@@ -1,0 +1,27 @@
+/pmd_royale_ros_camera_node:
+  ros__parameters:
+    auto_exposure: true
+    available_usecases:
+    - Mode_5_15fps
+    - Mode_5_30fps
+    - Mode_5_45fps
+    - Mode_5_60fps
+    - Mode_9_10fps
+    - Mode_9_15fps
+    - Mode_9_20fps
+    - Mode_9_30fps
+    - Mode_9_5fps
+    exposure_time: 50
+    model: Flexx2
+    qos_overrides:
+      /parameter_events:
+        publisher:
+          depth: 1000
+          durability: volatile
+          history: keep_last
+          reliability: reliable
+    # Uncomment below and modify for your specific Flexx2
+    # serial: 8230-93AE-1FA8-283C
+    use_sim_time: false
+    usecase: Mode_9_30fps
+

@@ -1,0 +1,9 @@
+<library path="pmd_royale_ros_rviz_panel">
+  <class name="pmd_royale_ros_examples/PMDRoyaleRVIZ"
+         type="pmd_royale_ros_examples::PMDRoyaleRVIZ"
+         base_class_type="rviz_common::Panel">
+    <description>
+      A panel widget to show the info of a pmd camera.
+    </description>
+  </class>
+</library>

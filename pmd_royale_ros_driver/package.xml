@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>pmd_royale_ros_driver</name>
+  <version>0.0.1</version>
+  <description>ROS2 wrapper for pmd TOF cameras using the Royale library</description>
+  <maintainer email="info@pmdtec.com">PMD</maintainer>
+  <author email="info@pmdtec.com">PMD</author>
+  <license>BSD-3-Clause</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>rclcpp_components</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
