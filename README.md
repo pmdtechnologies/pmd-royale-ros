@@ -23,37 +23,44 @@ pmd_royale_ros is the meta package and depends on two subpackages:
 2. Clone into the ROS2 workspace folder:
     ```
    cd ~/ros2ws/src
-   git clone -b humble git@github.com:pmdtechnologies/pmd_royale_ros.git
+   git clone https://github.com/pmdtechnologies/pmd-royale-ros.git
    ```
 
 3. Setup ROS2 environment:
     ```
    source /opt/ros/humble/setup.bash
    ```
-   
-4. Build with symlink:
 
-   To build the meta package pmd_royale_ros which includes pmd_royale_ros_driver and pmd_royale_ros_examples:
+4. Build with symlink:
+   ```
+   cd ~/ros2ws
+   ```
+
+   To build all packages in the workspace including pmd_royale_ros_driver and pmd_royale_ros_examples:
     ```
-   colcon build --packages-select pmd_royale_ros --symlink-install --cmake-args -DCMAKE_PREFIX_PATH=<royale_sdk_path>/share/
-   ```
-   
-   To build just pmd_royale_ros_driver:
-   ```
-   colcon build --packages-select pmd_royale_ros_driver --symlink-install --cmake-args -DCMAKE_PREFIX_PATH=<royale_sdk_path>/share/
-   ```
-   
-   To build just pmd_royale_ros_examples:
-   ```
-   colcon build --packages-select pmd_royale_ros_examples --symlink-install --cmake-args -DCMAKE_PREFIX_PATH=<royale_sdk_path>/share/
+   colcon build --symlink-install --cmake-args -DCMAKE_PREFIX_PATH=<royale_sdk_path>/share/
    ```
 
    Where `<royale_sdk_path>` is location of the Royale SDK installation
 
+   To build just pmd_royale_ros_driver:
+   ```
+   colcon build --packages-select pmd_royale_ros_driver --symlink-install --cmake-args -DCMAKE_PREFIX_PATH=<royale_sdk_path>/share/
+   ```
+
+   To build just pmd_royale_ros_examples:
+   ```
+   colcon build --packages-select pmd_royale_ros_examples --symlink-install
+   ```
+
+   Note that the pmd_royale_ros_examples just provides launch files and an RViz panel which does not
+   require the Royale SDK installation. This can be useful if you just want to communicate with a
+   compatible pmd-royale-ros camera node.
+
 
 5. Source the setup.bash file or add to the end of your ~/.bashrc:
     ```
-   source /home/$USER/rosw2ws/install/setup.bash
+   source ~/ros2ws/install/setup.bash
    ```
 
 ## Run Instructions
