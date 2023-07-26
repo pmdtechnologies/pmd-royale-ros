@@ -45,7 +45,7 @@ pmd_royale_ros is the meta package and depends on two subpackages:
 
    To build just pmd_royale_ros_driver:
    ```
-   colcon build --packages-select pmd_royale_ros_driver --symlink-install --cmake-args -DCMAKE_PREFIX_PATH=<royale_sdk_path>/share/
+   colcon build --packages-select pmd_royale_ros_driver --symlink-install --cmake-args -DCMAKE_PREFIX_PATH=<royale_sdk_path>/lib/cmake
    ```
 
    To build just pmd_royale_ros_examples:
