@@ -23,36 +23,44 @@ CameraControlWidget::CameraControlWidget(std::shared_ptr<rclcpp::Node> node, std
     m_comboBoxUseCases = new QComboBox;
     controlLayout->addWidget(m_comboBoxUseCases);
 
-    // Exposure Time
-    m_labelExpoTime = new QLabel;
-    controlLayout->addWidget(m_labelExpoTime);
-    QHBoxLayout *exTimeLayout = new QHBoxLayout;
-
-    m_sliderExpoTime = new QSlider(Qt::Horizontal);
-    m_sliderExpoTime->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed);
-    exTimeLayout->addWidget(m_sliderExpoTime);
-
-    m_lineEditExpoTime = new QLineEdit;
-    m_lineEditExpoTime->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
-    exTimeLayout->addWidget(m_lineEditExpoTime);
-
-    controlLayout->addLayout(exTimeLayout);
-
-    // Auto Exposure
-    controlLayout->addWidget(new QLabel("Auto Exposure:"));
-    m_checkBoxAutoExpo = new QCheckBox;
-    controlLayout->addWidget(m_checkBoxAutoExpo);
-
-    setLayout(controlLayout);
-
     connect(m_comboBoxUseCases, SIGNAL(currentTextChanged(const QString)), this, SLOT(setUseCase(const QString)));
     connect(m_comboBoxUseCases, SIGNAL(currentTextChanged(const QString)), this, SLOT(setUseCase(const QString)));
-    connect(m_sliderExpoTime, SIGNAL(valueChanged(int)), this, SLOT(setExposureTime(int)));
-    connect(m_checkBoxAutoExpo, SIGNAL(toggled(bool)), this, SLOT(setExposureMode(bool)));
-    connect(m_lineEditExpoTime, SIGNAL(editingFinished()), this, SLOT(preciseExposureTimeSetting()));
 
-    subscribeForCameraParameters({"available_usecases", "usecase", "exposure_time", "auto_exposure",
+    for (auto i = 0u; i < ROYALE_ROS_MAX_STREAMS; ++i) {
+        controlLayout->addWidget(new QLabel(QString("Stream ") + QString::number(i) + " : "));
+
+        // Exposure Time
+        m_labelExpoTime[i] = new QLabel;
+        controlLayout->addWidget(m_labelExpoTime[i]);
+        QHBoxLayout *exTimeLayout = new QHBoxLayout;
+
+        m_sliderExpoTime[i] = new QSlider(Qt::Horizontal);
+        m_sliderExpoTime[i]->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed);
+        m_sliderExpoTime[i]->setTracking(false);
+        exTimeLayout->addWidget(m_sliderExpoTime[i]);
+
+        m_lineEditExpoTime[i] = new QLineEdit;
+        m_lineEditExpoTime[i]->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+        exTimeLayout->addWidget(m_lineEditExpoTime[i]);
+
+        controlLayout->addLayout(exTimeLayout);
+
+        // Auto Exposure
+        controlLayout->addWidget(new QLabel("Auto Exposure:"));
+        m_checkBoxAutoExpo[i] = new QCheckBox;
+        controlLayout->addWidget(m_checkBoxAutoExpo[i]);
+
+        setLayout(controlLayout);
+
+        connect(m_sliderExpoTime[i], &QSlider::valueChanged, this, [this, i](int val) { setExposureTime(val, i); });
+        connect(m_checkBoxAutoExpo[i], &QCheckBox::toggled, this, [this, i](bool val) { setExposureMode(val, i); });
+        connect(m_lineEditExpoTime[i], &QLineEdit::editingFinished, this, [this, i](void) { preciseExposureTimeSetting(i); });
+    }
+    subscribeForCameraParameters({"available_usecases", "usecase",
                                   "gray_image_divisor", "min_distance_filter", "max_distance_filter"});
+    for (auto i = 0u; i < ROYALE_ROS_MAX_STREAMS; ++i) {
+        subscribeForCameraParameters({"exposure_time_" + std::to_string(i), "auto_exposure_" + std::to_string(i)});
+    }
 }
 
 CameraControlWidget::~CameraControlWidget() {}
@@ -77,17 +85,27 @@ void CameraControlWidget::onNewCameraParameter(const CameraParameter &cameraPara
             m_comboBoxUseCases->setCurrentIndex(currentIndex);
         }
         m_comboBoxUseCases->blockSignals(false);
-    } else if (param->get_name() == "exposure_time") {
+    } else if (param->get_name().find("exposure_time_") == 0) {
+        auto streamIdxStr = param->get_name().substr(strlen("exposure_time_"));
+        auto streamIdx = stoi(streamIdxStr);
         auto exposureRange = descriptor->integer_range.front();
-        m_sliderExpoTime->blockSignals(true);
-        m_sliderExpoTime->setRange(exposureRange.from_value, exposureRange.to_value);
-        m_labelExpoTime->setText("Exposure Time (microseconds):");
-        m_sliderExpoTime->setValue(param->as_int());
-        m_sliderExpoTime->blockSignals(false);
+        m_sliderExpoTime[streamIdx]->blockSignals(true);
+        m_sliderExpoTime[streamIdx]->setRange(exposureRange.from_value, exposureRange.to_value);
+        m_labelExpoTime[streamIdx]->setText("Exposure Time (microseconds):");
+        m_sliderExpoTime[streamIdx]->setValue(param->as_int());
+        m_sliderExpoTime[streamIdx]->blockSignals(false);
 
-        m_lineEditExpoTime->blockSignals(true);
-        m_lineEditExpoTime->setText(QString::number(param->as_int()));
-        m_lineEditExpoTime->blockSignals(false);
+        m_lineEditExpoTime[streamIdx]->blockSignals(true);
+        m_lineEditExpoTime[streamIdx]->setText(QString::number(param->as_int()));
+        m_lineEditExpoTime[streamIdx]->blockSignals(false);
+    } else if (param->get_name().find("auto_exposure_") == 0) {
+        auto streamIdxStr = param->get_name().substr(strlen("auto_exposure_"));
+        auto streamIdx = stoi(streamIdxStr);
+        m_checkBoxAutoExpo[streamIdx]->blockSignals(true);
+        m_checkBoxAutoExpo[streamIdx]->setChecked(param->as_bool());
+        m_sliderExpoTime[streamIdx]->setEnabled(!param->as_bool());
+        m_labelExpoTime[streamIdx]->setEnabled(!param->as_bool());
+        m_checkBoxAutoExpo[streamIdx]->blockSignals(false);
     }
 }
 
@@ -96,19 +114,19 @@ void CameraControlWidget::setUseCase(const QString &currentMode) {
     setParameter(parameter);
 }
 
-void CameraControlWidget::setExposureTime(int value) {
-    rclcpp::Parameter parameter("exposure_time", value);
+void CameraControlWidget::setExposureTime(int value, uint32_t streamIdx) {
+    rclcpp::Parameter parameter(std::string("exposure_time_") + std::to_string(streamIdx), value);
     setParameter(parameter);
 }
 
-void CameraControlWidget::setExposureMode(bool isAutomatic) {
-    rclcpp::Parameter parameter("auto_exposure", isAutomatic);
+void CameraControlWidget::setExposureMode(bool isAutomatic, uint32_t streamIdx) {
+    rclcpp::Parameter parameter(std::string("auto_exposure_") + std::to_string(streamIdx), isAutomatic);
     setParameter(parameter);
 }
 
-void CameraControlWidget::preciseExposureTimeSetting() {
-    int value = m_lineEditExpoTime->text().toInt();
-    setExposureTime(value);
+void CameraControlWidget::preciseExposureTimeSetting(uint32_t streamIdx) {
+    int value = m_lineEditExpoTime[streamIdx]->text().toInt();
+    setExposureTime(value, streamIdx);
 }
 
 } // namespace pmd_royale_ros_examples

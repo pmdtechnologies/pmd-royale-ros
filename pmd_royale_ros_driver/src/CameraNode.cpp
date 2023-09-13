@@ -20,8 +20,6 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options)
     : Node("pmd_royale_ros_camera_node", options),
       IExposureListener(),
       m_parametersClient(this),
-      m_exposureTime(0),
-      m_isAutoExposureEnabled(false),
       m_isPubCloud(false),
       m_isPubDepth(false),
       m_isPubGray(false),
@@ -83,19 +81,12 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options)
         RCLCPP_ERROR(this->get_logger(), "Could not get available usecases");
         return;
     }
+
     std::vector<std::string> stdUseCaseList;
     for (auto &useCase : useCases) {
-        uint32_t streamCount;
-        if (m_cameraDevice->getNumberOfStreams(useCase, streamCount) !=
-            CameraStatus::SUCCESS) {
-            return;
-        } else {
-            // Currently only support usecases with 1 stream
-            if (streamCount == 1) {
-                stdUseCaseList.push_back(useCase.toStdString());
-            }
-        }
+        stdUseCaseList.push_back (useCase.toStdString());
     }
+
     rcl_interfaces::msg::ParameterDescriptor availableUseCasesParameterDescriptor;
     availableUseCasesParameterDescriptor.name = "available_usecases";
     availableUseCasesParameterDescriptor.description = "Read only list of available usecases for this camera";
@@ -122,39 +113,50 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options)
         }
     }
 
-    rcl_interfaces::msg::ParameterDescriptor enableAEParamDescriptor;
-    enableAEParamDescriptor.name = "auto_exposure";
-    enableAEParamDescriptor.description = "Controls auto exposure";
-    enableAEParamDescriptor.additional_constraints = "Cannot set the exposure_time parameter while this paramter's value is True";
-    m_isAutoExposureEnabled = this->declare_parameter("auto_exposure", true, enableAEParamDescriptor);
-    royale::ExposureMode expoMode = m_isAutoExposureEnabled ? royale::ExposureMode::AUTOMATIC : royale::ExposureMode::MANUAL;
-    if (m_cameraDevice->setExposureMode(expoMode) != royale::CameraStatus::SUCCESS) {
-        RCLCPP_ERROR(this->get_logger(), "Could not configure exposure mode");
+    Vector<StreamId> streamIds;
+    if (m_cameraDevice->getStreams(streamIds) != CameraStatus::SUCCESS) {
+        RCLCPP_ERROR(this->get_logger(), "Couldn't retrieve streams!");
         return;
     }
-
-    // If user provided exposure_time and no auto_exposure,
-    royale::Pair<uint32_t, uint32_t> exposureLimits;
-    m_cameraDevice->getExposureLimits(exposureLimits);
-    rcl_interfaces::msg::ParameterDescriptor exposureParamDescriptor;
-    exposureParamDescriptor.name = "exposure_time";
-    exposureParamDescriptor.description = "Current exposure time.";
-    exposureParamDescriptor.additional_constraints = "Cannot be set if auto_exposure is True. "
-                                                     "Must be within the integer range for the current usecase.";
-    rcl_interfaces::msg::IntegerRange exposureTimeRange;
-    exposureTimeRange.from_value = exposureLimits.first;
-    exposureTimeRange.to_value = exposureLimits.second;
-    exposureTimeRange.step = 1;
-    exposureParamDescriptor.integer_range.push_back(exposureTimeRange);
-    exposureParamDescriptor.dynamic_typing = true; // Set dynamic_typing to true only so this can be re-declared later
-    m_exposureTime = this->declare_parameter("exposure_time", (int)exposureLimits.second, exposureParamDescriptor, m_isAutoExposureEnabled);
-    if (!m_isAutoExposureEnabled) {
-        if (m_cameraDevice->setExposureTime((uint32_t)m_exposureTime) != royale::CameraStatus::SUCCESS) {
-            RCLCPP_ERROR(this->get_logger(), "Could not set exposure time of %d", (int)m_exposureTime);
-            return;
-        }
+    for (auto i = 0u; i < streamIds.size (); ++i) {
+        m_streamIdx[streamIds[i]] = i;
     }
 
+    for (auto i = 0u; i < ROYALE_ROS_MAX_STREAMS; ++i) {
+        rcl_interfaces::msg::ParameterDescriptor enableAEParamDescriptor;
+        enableAEParamDescriptor.name = "auto_exposure_" + std::to_string(i);
+        enableAEParamDescriptor.description = "Controls auto exposure for stream " + std::to_string(i);
+        enableAEParamDescriptor.additional_constraints = "Cannot set the exposure_time parameter while this paramter's value is True";
+        m_isAutoExposureEnabled[i] = this->declare_parameter("auto_exposure_" + std::to_string(i), true, enableAEParamDescriptor);
+        royale::ExposureMode expoMode = m_isAutoExposureEnabled[i] ? royale::ExposureMode::AUTOMATIC : royale::ExposureMode::MANUAL;
+        if (m_cameraDevice->setExposureMode(expoMode, streamIds[i]) != royale::CameraStatus::SUCCESS) {
+            RCLCPP_ERROR(this->get_logger(), "Could not configure exposure mode for stream %d", i);
+            return;
+        }
+        
+        // If user provided exposure_time and no auto_exposure,
+        royale::Pair<uint32_t, uint32_t> exposureLimits;
+        m_cameraDevice->getExposureLimits(exposureLimits, streamIds[i]);
+        rcl_interfaces::msg::ParameterDescriptor exposureParamDescriptor;
+        exposureParamDescriptor.name = "exposure_time_" + std::to_string(i);
+        exposureParamDescriptor.description = "Current exposure time for stream %d", i;
+        exposureParamDescriptor.additional_constraints = "Cannot be set if auto_exposure is True. "
+                                                         "Must be within the integer range for the current usecase.";
+        rcl_interfaces::msg::IntegerRange exposureTimeRange;
+        exposureTimeRange.from_value = exposureLimits.first;
+        exposureTimeRange.to_value = exposureLimits.second;
+        exposureTimeRange.step = 1;
+        exposureParamDescriptor.integer_range.push_back(exposureTimeRange);
+        exposureParamDescriptor.dynamic_typing = true; // Set dynamic_typing to true only so this can be re-declared later
+        m_exposureTime[i] = this->declare_parameter(exposureParamDescriptor.name, (int)exposureLimits.second, exposureParamDescriptor, m_isAutoExposureEnabled[i]);
+        if (!m_isAutoExposureEnabled[i]) {
+            if (m_cameraDevice->setExposureTime((uint32_t)m_exposureTime[i], streamIds[i]) != royale::CameraStatus::SUCCESS) {
+                RCLCPP_ERROR(this->get_logger(), "Could not set exposure time of %d for stream %d", (int)m_exposureTime[i], i);
+                return;
+            }
+        }
+    }
+    
     if (!setCameraInfo()) {
         RCLCPP_ERROR(this->get_logger(), "Couldn't create camera info!");
         return;
@@ -174,15 +176,19 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options)
     // Advertise our point cloud topic and image topics
     m_pubCameraInfo = this->create_publisher<sensor_msgs::msg::CameraInfo>(
         nodeName + "/camera_info", 10);
-    m_pubCloud = this->create_publisher<sensor_msgs::msg::PointCloud2>(
-        nodeName + "/point_cloud", 10);
-    m_pubDepth = this->create_publisher<sensor_msgs::msg::Image>(nodeName + "/depth_image",
-                                                                 10);
-    m_pubGray = this->create_publisher<sensor_msgs::msg::Image>(nodeName + "/gray_image",
-                                                                10);
+    for (auto i = 0u; i < ROYALE_ROS_MAX_STREAMS; ++i) {
+        m_pubCloud[i] = this->create_publisher<sensor_msgs::msg::PointCloud2>(
+            nodeName + "/point_cloud_" + std::to_string(i), 10);
+        m_pubDepth[i] = this->create_publisher<sensor_msgs::msg::Image>(nodeName + "/depth_image_" + std::to_string(i),
+                                                                     10);
+        m_pubGray[i] = this->create_publisher<sensor_msgs::msg::Image>(nodeName + "/gray_image_" + std::to_string(i),
+                                                                    10);
+    }                                                                    
 
     m_onSetParametersCbHandle = this->add_on_set_parameters_callback(std::bind(&CameraNode::onSetParameters, this, std::placeholders::_1));
     m_onSetParametersEventCbHandle = m_parametersClient.on_parameter_event(std::bind(&CameraNode::onParametersSetEvent, this, std::placeholders::_1));
+
+    initUseCase ();
 
     start();
 }
@@ -207,7 +213,8 @@ void CameraNode::stop() {
 }
 
 void CameraNode::onNewData(const royale::PointCloud *data) {
-
+    auto curIdx = m_streamIdx[data->streamId];
+    
     std_msgs::msg::Header header;
     header.frame_id = string(this->get_name()) + "_optical_frame";
     header.stamp = rclcpp::Time(
@@ -235,7 +242,7 @@ void CameraNode::onNewData(const royale::PointCloud *data) {
         float* cloudPtr = reinterpret_cast<float*>(&msgPointCloud->data[0]);
         ::memcpy(cloudPtr, data->xyzcPoints, 4 * sizeof(float) * numPoints);
 
-        m_pubCloud->publish(std::move(msgPointCloud));
+        m_pubCloud[curIdx]->publish(std::move(msgPointCloud));
     }
 
     if (m_isPubDepth)
@@ -257,7 +264,7 @@ void CameraNode::onNewData(const royale::PointCloud *data) {
         for (auto i = 0u; i < numPoints; ++i) {
             *iterDepth++ = data->xyzcPoints[i * 4 + 2];
         }
-        m_pubDepth->publish(std::move(msgDepthImage));
+        m_pubDepth[curIdx]->publish(std::move(msgDepthImage));
     }
 
     // Publish with CameraInfo
@@ -270,6 +277,8 @@ void CameraNode::onNewData(const royale::PointCloud *data) {
 }
 
 void CameraNode::onNewData(const royale::IRImage *data) {
+    auto curIdx = m_streamIdx[data->streamId];
+    
     std_msgs::msg::Header header;
     header.frame_id = string(this->get_name()) + "_optical_frame";
     header.stamp = rclcpp::Time(
@@ -290,7 +299,7 @@ void CameraNode::onNewData(const royale::IRImage *data) {
 
     ::memcpy(&msgGrayImage->data[0], data->data, numPoints);
 
-    m_pubGray->publish(std::move(msgGrayImage));
+    m_pubGray[curIdx]->publish(std::move(msgGrayImage));
 
     // Publish with CameraInfo
     sensor_msgs::msg::CameraInfo::UniquePtr msgCameraInfo(new sensor_msgs::msg::CameraInfo);
@@ -301,18 +310,17 @@ void CameraNode::onNewData(const royale::IRImage *data) {
     m_pubCameraInfo->publish(std::move(msgCameraInfo));
 }
 
-void CameraNode::onNewExposure(const uint32_t exposureTime, const royale::StreamId) {
-    if (m_exposureTime == exposureTime) {
+void CameraNode::onNewExposure(const uint32_t exposureTime, const royale::StreamId streamId) {
+    auto curIdx = m_streamIdx[streamId];
+    if (m_exposureTime[curIdx] == exposureTime) {
         return;
     }
 
-    m_exposureTime = exposureTime;
+    m_exposureTime[curIdx] = exposureTime;
 
     try {
-        this->set_parameter(rclcpp::Parameter("exposure_time", (int)m_exposureTime));
+        this->set_parameter(rclcpp::Parameter("exposure_time_" + std::to_string(curIdx), (int)m_exposureTime[curIdx]));
     } catch (std::exception &exception) {
-        // During the usecase parameter change callback, the camera stops and will make one last callback to onNewExposure.
-        // This will throw an exception because parameters cannot be set during any parameter set callback.
         RCLCPP_INFO(this->get_logger(), "Caught exception in onNewExposure callback: %s", exception.what());
     }
 }
@@ -327,10 +335,26 @@ rcl_interfaces::msg::SetParametersResult CameraNode::onSetParameters(const std::
         }
         if (parameter.get_name() == "usecase" && parameter.get_type() == rclcpp::PARAMETER_STRING) {
             result.successful = setUseCase(parameter.as_string());
-        } else if (parameter.get_name() == "exposure_time" && parameter.get_type() == rclcpp::PARAMETER_INTEGER) {
-            result.successful = setExposureTime((int)parameter.as_int());
-        } else if (parameter.get_name() == "auto_exposure" && parameter.get_type() == rclcpp::PARAMETER_BOOL) {
-            result.successful = enableAutoExposure(parameter.as_bool());
+        } else if (parameter.get_name().find ("exposure_time_") == 0 && parameter.get_type() == rclcpp::PARAMETER_INTEGER) {
+            auto streamIdxStr = parameter.get_name().substr (strlen("exposure_time_"));
+            auto streamIdx = stoi(streamIdxStr);
+            StreamId streamId = 0;
+            for (auto curIdx : m_streamIdx) {
+                if (curIdx.second == streamIdx) {
+                    streamId = curIdx.first;
+                }
+            }
+            result.successful = setExposureTime((int)parameter.as_int(), streamId);
+        } else if (parameter.get_name().find ("auto_exposure_") == 0 && parameter.get_type() == rclcpp::PARAMETER_BOOL) {
+            auto streamIdxStr = parameter.get_name().substr (strlen("auto_exposure_"));
+            auto streamIdx = stoi(streamIdxStr);
+            StreamId streamId = 0;
+            for (auto curIdx : m_streamIdx) {
+                if (curIdx.second == streamIdx) {
+                    streamId = curIdx.first;
+                }
+            }
+            result.successful = enableAutoExposure(parameter.as_bool(), streamId);
         }
     }
 
@@ -341,30 +365,7 @@ void CameraNode::onParametersSetEvent(const rcl_interfaces::msg::ParameterEvent 
     auto params = rclcpp::ParameterEventHandler::get_parameters_from_event(event);
     for (auto &param : params) {
         if (param.get_name() == "usecase") {
-            // Update the current exposure mode for this new uesecase
-            royale::ExposureMode exposureMode;
-            m_cameraDevice->getExposureMode(exposureMode);
-            this->set_parameter(rclcpp::Parameter("auto_exposure", exposureMode == royale::ExposureMode::AUTOMATIC));
-
-            // Once the current usecase has been set, we must update the exposure_time and its limits as each
-            // usecase has a different exposure range. Since the integer range must be updated, it can only be
-            // undeclared and redeclared with new ranges.
-            if (this->has_parameter("exposure_time")) {
-                royale::Pair<uint32_t, uint32_t> exposureLimits;
-                m_cameraDevice->getExposureLimits(exposureLimits);
-                rcl_interfaces::msg::ParameterDescriptor exposureParamDescriptor = this->describe_parameter("exposure_time");
-                exposureParamDescriptor.integer_range.clear();
-                rcl_interfaces::msg::IntegerRange exposureTimeRange;
-                exposureTimeRange.from_value = exposureLimits.first;
-                exposureTimeRange.to_value = exposureLimits.second;
-                exposureTimeRange.step = 1;
-                exposureParamDescriptor.integer_range.push_back(exposureTimeRange);
-                this->undeclare_parameter("exposure_time");
-                this->declare_parameter("exposure_time", (int)exposureLimits.second, exposureParamDescriptor);
-
-            } else {
-                RCLCPP_ERROR(this->get_logger(), "No exposure_time parameter defined after update to usecase");
-            }
+            initUseCase ();
 
             m_cameraDevice->startCapture();
         }
@@ -438,40 +439,82 @@ bool CameraNode::setUseCase(const std::string &useCase) {
     return true;
 }
 
-bool CameraNode::setExposureTime(int exposureTime) {
-    if (m_isAutoExposureEnabled) {
+bool CameraNode::setExposureTime(int exposureTime, royale::StreamId streamId) {
+    if (m_isAutoExposureEnabled[m_streamIdx[streamId]]) {
         return true;
     }
 
+    RCLCPP_INFO(this->get_logger(), "Setting exposure: %d %d", (int)exposureTime, streamId);
     int tries = 5;
     CameraStatus ret;
     do {
-        ret = m_cameraDevice->setExposureTime(exposureTime);
+        ret = m_cameraDevice->setExposureTime(exposureTime, streamId);
         if (ret == CameraStatus::DEVICE_IS_BUSY) {
             this_thread::sleep_for(chrono::milliseconds(200));
             tries--;
-        } else {
+        } else if (ret != CameraStatus::SUCCESS) {
             RCLCPP_ERROR(this->get_logger(), "Error setting exposure time: %d", (int)ret);
+            return false;
         }
     } while (tries > 0 && ret == CameraStatus::DEVICE_IS_BUSY);
 
     return ret == CameraStatus::SUCCESS;
 }
 
-bool CameraNode::enableAutoExposure(bool enable) {
-    auto result = m_cameraDevice->setExposureMode(enable ? royale::ExposureMode::AUTOMATIC : royale::ExposureMode::MANUAL);
+bool CameraNode::enableAutoExposure(bool enable, royale::StreamId streamId) {
+    RCLCPP_INFO(this->get_logger(), "Setting auto exposure: %d %d", (int)enable, streamId);
+    auto result = m_cameraDevice->setExposureMode(enable ? royale::ExposureMode::AUTOMATIC : royale::ExposureMode::MANUAL, streamId);
     if (result != royale::CameraStatus::SUCCESS) {
         RCLCPP_ERROR(this->get_logger(), "Error setting auto exposure: %d", (int)enable);
+        return false;
     }
-    m_isAutoExposureEnabled = enable;
-    return result == royale::CameraStatus::SUCCESS;
+    m_isAutoExposureEnabled[m_streamIdx[streamId]] = enable;
+    return result == CameraStatus::SUCCESS;
+}
+
+void CameraNode::initUseCase() {
+    Vector<StreamId> streamIds;
+    if (m_cameraDevice->getStreams(streamIds) != CameraStatus::SUCCESS) {
+        RCLCPP_ERROR(this->get_logger(), "Couldn't retrieve streams!");
+        return;
+    }
+    m_streamIdx.clear ();
+    for (auto i = 0u; i < streamIds.size (); ++i) {
+        m_streamIdx[streamIds[i]] = i;
+    }
+
+    for (auto i = 0u; i < streamIds.size(); ++i) {
+        royale::Pair<uint32_t, uint32_t> exposureLimits;
+        m_cameraDevice->getExposureLimits(exposureLimits, streamIds[i]);
+
+        rcl_interfaces::msg::ParameterDescriptor exposureParamDescriptor = this->describe_parameter("exposure_time_" + std::to_string(i));
+        exposureParamDescriptor.integer_range.clear();
+        rcl_interfaces::msg::IntegerRange exposureTimeRange;
+        exposureTimeRange.from_value = exposureLimits.first;
+        exposureTimeRange.to_value = exposureLimits.second;
+        exposureTimeRange.step = 1;
+        exposureParamDescriptor.integer_range.push_back(exposureTimeRange);
+        this->undeclare_parameter("exposure_time_" + std::to_string(i));
+        this->declare_parameter("exposure_time_" + std::to_string(i), (int)exposureLimits.second, exposureParamDescriptor);
+
+        ExposureMode expoMode;
+        m_cameraDevice->getExposureMode(expoMode, streamIds[i]);
+        m_isAutoExposureEnabled[i] = (expoMode == ExposureMode::AUTOMATIC);
+        this->set_parameter(rclcpp::Parameter("auto_exposure_" + std::to_string(i), m_isAutoExposureEnabled[i]));
+    }
 }
 
 void CameraNode::updateDataListeners() {
-    m_isPubCloud = m_pubCloud->get_subscription_count() > 0 || m_pubCloud->get_intra_process_subscription_count() > 0;
-    m_isPubDepth = m_pubDepth->get_subscription_count() > 0 || m_pubDepth->get_intra_process_subscription_count() > 0;
-    m_isPubGray = m_pubGray->get_subscription_count() > 0 || m_pubGray->get_intra_process_subscription_count() > 0;
+    m_isPubCloud = false;
+    m_isPubDepth = false;
+    m_isPubGray = false;
 
+    for (auto i = 0u; i < ROYALE_ROS_MAX_STREAMS; ++i) {
+        m_isPubCloud |= m_pubCloud[i]->get_subscription_count() > 0 || m_pubCloud[i]->get_intra_process_subscription_count() > 0;
+        m_isPubDepth |= m_pubDepth[i]->get_subscription_count() > 0 || m_pubDepth[i]->get_intra_process_subscription_count() > 0;
+        m_isPubGray |= m_pubGray[i]->get_subscription_count() > 0 || m_pubGray[i]->get_intra_process_subscription_count() > 0;
+    }
+    
     bool shouldRegisterPCListener = m_isPubCloud || m_isPubDepth;
 
     if (!m_registeredPCListener && shouldRegisterPCListener) {
