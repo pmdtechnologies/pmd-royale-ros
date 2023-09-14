@@ -42,6 +42,8 @@ def generate_launch_description():
                     # 'usecase' : 'Mode_9_30fps',
                     # 'auto_exposure' : False,
                     # 'exposure_time': 230,
+                    # 'access_code' : '',
+                    # 'recording_file' : 'file_to_record_to.rrf',
                 }])
         ],
         output='screen',

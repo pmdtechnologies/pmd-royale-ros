@@ -50,16 +50,24 @@ CameraControlWidget::CameraControlWidget(std::shared_ptr<rclcpp::Node> node, std
         m_checkBoxAutoExpo[i] = new QCheckBox;
         controlLayout->addWidget(m_checkBoxAutoExpo[i]);
 
+        // Parameters
+        controlLayout->addWidget(new QLabel("Parameter:"));
+        m_lineEditParams[i] = new QLineEdit;
+        controlLayout->addWidget(m_lineEditParams[i]);
+
         setLayout(controlLayout);
 
         connect(m_sliderExpoTime[i], &QSlider::valueChanged, this, [this, i](int val) { setExposureTime(val, i); });
         connect(m_checkBoxAutoExpo[i], &QCheckBox::toggled, this, [this, i](bool val) { setExposureMode(val, i); });
         connect(m_lineEditExpoTime[i], &QLineEdit::editingFinished, this, [this, i](void) { preciseExposureTimeSetting(i); });
+        connect(m_lineEditParams[i], &QLineEdit::editingFinished, this, [this, i](void) { setProcParameter(i); });
     }
     subscribeForCameraParameters({"available_usecases", "usecase",
                                   "gray_image_divisor", "min_distance_filter", "max_distance_filter"});
     for (auto i = 0u; i < ROYALE_ROS_MAX_STREAMS; ++i) {
         subscribeForCameraParameters({"exposure_time_" + std::to_string(i), "auto_exposure_" + std::to_string(i)});
+        m_pubParameters[i] = m_nh->create_publisher<std_msgs::msg::String>(
+            cameraNodeName + "/proc_params_" + std::to_string(i), 10);
     }
 }
 
@@ -85,8 +93,8 @@ void CameraControlWidget::onNewCameraParameter(const CameraParameter &cameraPara
             m_comboBoxUseCases->setCurrentIndex(currentIndex);
         }
         m_comboBoxUseCases->blockSignals(false);
-    } else if (param->get_name().find("exposure_time_") == 0) {
-        auto streamIdxStr = param->get_name().substr(strlen("exposure_time_"));
+    } else if (param->get_name().find ("exposure_time_") == 0) {
+        auto streamIdxStr = param->get_name().substr (strlen("exposure_time_"));
         auto streamIdx = stoi(streamIdxStr);
         auto exposureRange = descriptor->integer_range.front();
         m_sliderExpoTime[streamIdx]->blockSignals(true);
@@ -98,8 +106,8 @@ void CameraControlWidget::onNewCameraParameter(const CameraParameter &cameraPara
         m_lineEditExpoTime[streamIdx]->blockSignals(true);
         m_lineEditExpoTime[streamIdx]->setText(QString::number(param->as_int()));
         m_lineEditExpoTime[streamIdx]->blockSignals(false);
-    } else if (param->get_name().find("auto_exposure_") == 0) {
-        auto streamIdxStr = param->get_name().substr(strlen("auto_exposure_"));
+    } else if (param->get_name().find ("auto_exposure_") == 0) {
+        auto streamIdxStr = param->get_name().substr (strlen("auto_exposure_"));
         auto streamIdx = stoi(streamIdxStr);
         m_checkBoxAutoExpo[streamIdx]->blockSignals(true);
         m_checkBoxAutoExpo[streamIdx]->setChecked(param->as_bool());
@@ -127,6 +135,15 @@ void CameraControlWidget::setExposureMode(bool isAutomatic, uint32_t streamIdx) 
 void CameraControlWidget::preciseExposureTimeSetting(uint32_t streamIdx) {
     int value = m_lineEditExpoTime[streamIdx]->text().toInt();
     setExposureTime(value, streamIdx);
+}
+
+void CameraControlWidget::setProcParameter(uint32_t streamIdx) {
+    if (!m_lineEditParams[streamIdx]->text ().isEmpty ()) {
+        std_msgs::msg::String msg;
+        msg.data = m_lineEditParams[streamIdx]->text ().toStdString ();
+        m_lineEditParams[streamIdx]->clear ();
+        m_pubParameters[streamIdx]->publish(msg);
+    }
 }
 
 } // namespace pmd_royale_ros_examples

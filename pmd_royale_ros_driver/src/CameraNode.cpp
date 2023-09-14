@@ -10,6 +10,7 @@
 
 #include <CameraNode.hpp>
 #include <sstream>
+#include <limits.h>
 
 using namespace std;
 using namespace royale;
@@ -24,7 +25,8 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options)
       m_isPubDepth(false),
       m_isPubGray(false),
       m_registeredPCListener(false),
-      m_registeredIRListener(false) {
+      m_registeredIRListener(false),
+      m_recording_file("") {
 
     unsigned int major;
     unsigned int minor;
@@ -38,7 +40,27 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options)
     serialParameterDescriptor.description = "Serial number for the camera. Cannot change value after node configuration.";
     this->declare_parameter("serial", "", serialParameterDescriptor);
 
-    CameraManager manager;
+    rcl_interfaces::msg::ParameterDescriptor accessCodeParameterDescriptor;
+    serialParameterDescriptor.name = "access_code";
+    serialParameterDescriptor.description = "Access code for Royale.";
+    this->declare_parameter("access_code", "", accessCodeParameterDescriptor);
+
+    auto accessCode = this->get_parameter("access_code").as_string();
+
+    if (!accessCode.empty()) {
+        RCLCPP_INFO(this->get_logger(), "Using access code : %s", accessCode.c_str());
+    }
+
+    rcl_interfaces::msg::ParameterDescriptor recFileParameterDescriptor;
+    recFileParameterDescriptor.name = "recording_file";
+    recFileParameterDescriptor.description = "Recording file that should be used.";
+    this->declare_parameter("recording_file", "", recFileParameterDescriptor);
+
+    if (!this->get_parameter("recording_file").as_string().empty()) {
+        m_recording_file = this->get_parameter("recording_file").as_string();
+    }
+
+    CameraManager manager (accessCode.c_str());
     Vector<String> cameraList(manager.getConnectedCameraList());
     if (cameraList.empty()) {
         RCLCPP_ERROR(this->get_logger(), "No suitable cameras found!");
@@ -183,6 +205,10 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options)
                                                                      10);
         m_pubGray[i] = this->create_publisher<sensor_msgs::msg::Image>(nodeName + "/gray_image_" + std::to_string(i),
                                                                     10);
+
+        std::function<void(const std_msgs::msg::String::SharedPtr msg)> fcn = std::bind(&CameraNode::setProcParams, this, std::placeholders::_1, i);                                                                    
+        m_procParamsSubscription[i] = this->create_subscription<std_msgs::msg::String>(
+              nodeName + "/proc_params_" + std::to_string(i), 10, fcn);                                                                    
     }                                                                    
 
     m_onSetParametersCbHandle = this->add_on_set_parameters_callback(std::bind(&CameraNode::onSetParameters, this, std::placeholders::_1));
@@ -201,6 +227,14 @@ void CameraNode::start() {
     if (m_cameraDevice->startCapture() != CameraStatus::SUCCESS) {
         RCLCPP_ERROR(this->get_logger(), "Error starting camera capture!");
         return;
+    }
+    
+    // If we specified a file start the recording
+    if (!(m_recording_file.empty())) {
+        char resolvedPath[PATH_MAX];
+        realpath(m_recording_file.c_str(), resolvedPath);
+        RCLCPP_INFO(this->get_logger(), "Recording to : %s", resolvedPath);
+        m_cameraDevice->startRecording(m_recording_file);
     }
 }
 
@@ -429,6 +463,9 @@ bool CameraNode::setCameraInfo() {
 }
 
 bool CameraNode::setUseCase(const std::string &useCase) {
+    if (!m_recording_file.empty()) {
+        m_cameraDevice->stopRecording();
+    }
     m_cameraDevice->stopCapture();
     auto result = m_cameraDevice->setUseCase(useCase);
     if (result != royale::CameraStatus::SUCCESS) {
@@ -557,6 +594,59 @@ void CameraNode::updateDataListeners() {
         else {
             RCLCPP_ERROR(this->get_logger(), "Couldn't unregister IR data listener!");
         }
+    }
+}
+
+void CameraNode::setProcParams(const std_msgs::msg::String::SharedPtr parameters, uint32_t streamIdx) {
+    stringstream ss(parameters->data);
+    string word;
+    vector<string> params;
+    while (ss >> word) {
+        params.push_back(word);
+    }
+    if (params.size() != 2u) {
+        // we should get a parameter name and a value
+        RCLCPP_ERROR(this->get_logger(), "Invalid parameter : %s", ss.str().c_str());
+        return;
+    }
+
+    royale::Variant value;
+    royale::VariantType paramType;
+    if (getProcessingFlagType(params[0], paramType)) {
+        if (paramType == royale::VariantType::Bool) {
+            bool bvalue;
+            stringstream s2(params[1]);
+            s2 >> std::boolalpha >> bvalue;
+            value.setBool(bvalue);
+        } else if (paramType == royale::VariantType::Int) {
+            int32_t ivalue;
+            stringstream s2(params[1]);
+            s2 >> ivalue;
+            value.setInt(static_cast<int>(ivalue));
+        } else if (paramType == royale::VariantType::Float) {
+            float fvalue;
+            stringstream s2(params[1]);
+            s2 >> fvalue;
+            value.setFloat(fvalue);
+        }
+    } else {
+        RCLCPP_ERROR(this->get_logger(), "Processing parameter unknown : %s", params[0].c_str());
+        return;
+    }
+    StreamId streamId = 0;
+    for (auto curIdx : m_streamIdx) {
+        if (curIdx.second == streamIdx) {
+            streamId = curIdx.first;
+        }
+    }
+    
+    royale::Vector<royale::Pair<royale::String, royale::Variant>> newParam({{params[0], value}});
+    auto ret = m_cameraDevice->setProcessingParameters(newParam, streamId);
+
+    if (ret == CameraStatus::SUCCESS) {
+        RCLCPP_INFO(this->get_logger(), "Successfully set parameter : %d %s", streamId, parameters->data.c_str());
+    } else {
+        RCLCPP_INFO(this->get_logger(), "Error setting parameter : %d %s", streamId, parameters->data.c_str());
     }
 }
 

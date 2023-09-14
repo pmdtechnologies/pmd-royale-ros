@@ -70,6 +70,8 @@ class CameraNode : public rclcpp::Node,
 
     void updateDataListeners();
 
+    void setProcParams(const std_msgs::msg::String::SharedPtr parameters, uint32_t streamIdx);
+
     // Published topics
     sensor_msgs::msg::CameraInfo m_cameraInfo;
     rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr m_pubCameraInfo;
@@ -84,6 +86,8 @@ class CameraNode : public rclcpp::Node,
     rclcpp::Subscription<rcl_interfaces::msg::ParameterEvent>::SharedPtr m_onSetParametersEventCbHandle;
     rclcpp::SyncParametersClient m_parametersClient;
 
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr m_procParamsSubscription[ROYALE_ROS_MAX_STREAMS];
+
     // Parameters
     std::string m_serial;
     std::string m_model;
@@ -97,6 +101,7 @@ class CameraNode : public rclcpp::Node,
     bool m_registeredIRListener;
     rclcpp::TimerBase::SharedPtr m_updateDataListenersTimer;
     std::map<royale::StreamId, uint32_t> m_streamIdx;
+    std::string m_recording_file;
 };
 
 } // namespace pmd_royale_ros_driver
