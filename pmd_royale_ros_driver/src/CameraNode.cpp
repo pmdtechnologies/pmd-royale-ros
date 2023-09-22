@@ -151,7 +151,7 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options)
         enableAEParamDescriptor.additional_constraints = "Cannot set the exposure_time parameter while this paramter's value is True";
         m_isAutoExposureEnabled[i] = this->declare_parameter("auto_exposure_" + std::to_string(i), true, enableAEParamDescriptor);
         royale::ExposureMode expoMode = m_isAutoExposureEnabled[i] ? royale::ExposureMode::AUTOMATIC : royale::ExposureMode::MANUAL;
-        if (m_cameraDevice->setExposureMode(expoMode, streamIds[i]) != royale::CameraStatus::SUCCESS) {
+        if (i < streamIds.size () && m_cameraDevice->setExposureMode(expoMode, streamIds[i]) != royale::CameraStatus::SUCCESS) {
             RCLCPP_ERROR(this->get_logger(), "Could not configure exposure mode for stream %d", i);
             return;
         }
@@ -171,7 +171,7 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options)
         exposureParamDescriptor.integer_range.push_back(exposureTimeRange);
         exposureParamDescriptor.dynamic_typing = true; // Set dynamic_typing to true only so this can be re-declared later
         m_exposureTime[i] = this->declare_parameter(exposureParamDescriptor.name, (int)exposureLimits.second, exposureParamDescriptor, m_isAutoExposureEnabled[i]);
-        if (!m_isAutoExposureEnabled[i]) {
+        if (i < streamIds.size () && !m_isAutoExposureEnabled[i]) {
             if (m_cameraDevice->setExposureTime((uint32_t)m_exposureTime[i], streamIds[i]) != royale::CameraStatus::SUCCESS) {
                 RCLCPP_ERROR(this->get_logger(), "Could not set exposure time of %d for stream %d", (int)m_exposureTime[i], i);
                 return;
@@ -373,22 +373,30 @@ rcl_interfaces::msg::SetParametersResult CameraNode::onSetParameters(const std::
             auto streamIdxStr = parameter.get_name().substr (strlen("exposure_time_"));
             auto streamIdx = stoi(streamIdxStr);
             StreamId streamId = 0;
+            bool found = false;
             for (auto curIdx : m_streamIdx) {
                 if (curIdx.second == streamIdx) {
                     streamId = curIdx.first;
+                    found = true;
                 }
             }
-            result.successful = setExposureTime((int)parameter.as_int(), streamId);
+            if (found) {
+                result.successful = setExposureTime((int)parameter.as_int(), streamId);
+            }
         } else if (parameter.get_name().find ("auto_exposure_") == 0 && parameter.get_type() == rclcpp::PARAMETER_BOOL) {
             auto streamIdxStr = parameter.get_name().substr (strlen("auto_exposure_"));
             auto streamIdx = stoi(streamIdxStr);
             StreamId streamId = 0;
+            bool found = false;
             for (auto curIdx : m_streamIdx) {
                 if (curIdx.second == streamIdx) {
                     streamId = curIdx.first;
+                    found = true;
                 }
             }
-            result.successful = enableAutoExposure(parameter.as_bool(), streamId);
+            if (found) {
+                result.successful = enableAutoExposure(parameter.as_bool(), streamId);
+            }
         }
     }
 
