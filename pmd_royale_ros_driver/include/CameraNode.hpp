@@ -46,7 +46,6 @@ class CameraNode : public rclcpp::Node,
     void stop();
 
   private:
-
     // Callbacks from CameraDevice when image is ready
     void onNewData(const royale::PointCloud *data) override;
     void onNewData(const royale::IRImage *data) override;

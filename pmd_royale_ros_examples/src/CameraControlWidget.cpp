@@ -93,8 +93,8 @@ void CameraControlWidget::onNewCameraParameter(const CameraParameter &cameraPara
             m_comboBoxUseCases->setCurrentIndex(currentIndex);
         }
         m_comboBoxUseCases->blockSignals(false);
-    } else if (param->get_name().find ("exposure_time_") == 0) {
-        auto streamIdxStr = param->get_name().substr (strlen("exposure_time_"));
+    } else if (param->get_name().find("exposure_time_") == 0) {
+        auto streamIdxStr = param->get_name().substr(strlen("exposure_time_"));
         auto streamIdx = stoi(streamIdxStr);
         auto exposureRange = descriptor->integer_range.front();
         m_sliderExpoTime[streamIdx]->blockSignals(true);
@@ -106,8 +106,8 @@ void CameraControlWidget::onNewCameraParameter(const CameraParameter &cameraPara
         m_lineEditExpoTime[streamIdx]->blockSignals(true);
         m_lineEditExpoTime[streamIdx]->setText(QString::number(param->as_int()));
         m_lineEditExpoTime[streamIdx]->blockSignals(false);
-    } else if (param->get_name().find ("auto_exposure_") == 0) {
-        auto streamIdxStr = param->get_name().substr (strlen("auto_exposure_"));
+    } else if (param->get_name().find("auto_exposure_") == 0) {
+        auto streamIdxStr = param->get_name().substr(strlen("auto_exposure_"));
         auto streamIdx = stoi(streamIdxStr);
         m_checkBoxAutoExpo[streamIdx]->blockSignals(true);
         m_checkBoxAutoExpo[streamIdx]->setChecked(param->as_bool());
@@ -138,10 +138,10 @@ void CameraControlWidget::preciseExposureTimeSetting(uint32_t streamIdx) {
 }
 
 void CameraControlWidget::setProcParameter(uint32_t streamIdx) {
-    if (!m_lineEditParams[streamIdx]->text ().isEmpty ()) {
+    if (!m_lineEditParams[streamIdx]->text().isEmpty()) {
         std_msgs::msg::String msg;
-        msg.data = m_lineEditParams[streamIdx]->text ().toStdString ();
-        m_lineEditParams[streamIdx]->clear ();
+        msg.data = m_lineEditParams[streamIdx]->text().toStdString();
+        m_lineEditParams[streamIdx]->clear();
         m_pubParameters[streamIdx]->publish(msg);
     }
 }

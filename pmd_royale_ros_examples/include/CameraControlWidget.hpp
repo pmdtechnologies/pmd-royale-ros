@@ -54,9 +54,8 @@ class CameraControlWidget : public QWidget, public CameraParametersClient {
     QCheckBox *m_checkBoxAutoExpo[ROYALE_ROS_MAX_STREAMS];
     QLineEdit *m_lineEditParams[ROYALE_ROS_MAX_STREAMS];
     rclcpp::Node::SharedPtr m_nh;
-    
+
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr m_pubParameters[ROYALE_ROS_MAX_STREAMS];
-   
 };
 
 } // namespace pmd_royale_ros_examples
