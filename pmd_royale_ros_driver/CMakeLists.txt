@@ -13,7 +13,6 @@ cmake_minimum_required (VERSION 3.13)
 project (pmd_royale_ros_driver VERSION 0.0.1 LANGUAGES CXX)
 
 find_package (royale REQUIRED)
-link_directories (${royale_LIB_DIR})
 
 set (CMAKE_CXX_STANDARD 14)
 
@@ -25,7 +24,7 @@ find_package (rclcpp_components REQUIRED)
 
 add_library (pmd_royale_ros_node SHARED "${CMAKE_CURRENT_SOURCE_DIR}/include/CameraNode.hpp"
                                         "${CMAKE_CURRENT_SOURCE_DIR}/src/CameraNode.cpp")
-target_link_libraries (pmd_royale_ros_node ${royale_LIBS})
+target_link_libraries (pmd_royale_ros_node royale::royale)
 target_include_directories (pmd_royale_ros_node PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_definitions (pmd_royale_ros_node PRIVATE "COMPOSITION_BUILDING_DLL")
 ament_target_dependencies (pmd_royale_ros_node "rclcpp" "std_msgs" "sensor_msgs"

@@ -28,6 +28,8 @@
 
 #include "VisibilityControl.hpp"
 
+#define ROYALE_ROS_MAX_STREAMS 2u
+
 namespace pmd_royale_ros_driver {
 
 class CameraNode : public rclcpp::Node,
@@ -44,7 +46,6 @@ class CameraNode : public rclcpp::Node,
     void stop();
 
   private:
-
     // Callbacks from CameraDevice when image is ready
     void onNewData(const royale::PointCloud *data) override;
     void onNewData(const royale::IRImage *data) override;
@@ -61,17 +62,21 @@ class CameraNode : public rclcpp::Node,
 
     // Callbacks for parameter changes which reconfigure the CameraDevice
     bool setUseCase(const std::string &useCase);
-    bool setExposureTime(int exposureTime);
-    bool enableAutoExposure(bool enable);
+    bool setExposureTime(int exposureTime, royale::StreamId streamId);
+    bool enableAutoExposure(bool enable, royale::StreamId streamId);
+
+    void initUseCase();
 
     void updateDataListeners();
+
+    void setProcParams(const std_msgs::msg::String::SharedPtr parameters, uint32_t streamIdx);
 
     // Published topics
     sensor_msgs::msg::CameraInfo m_cameraInfo;
     rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr m_pubCameraInfo;
-    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr m_pubCloud;
-    rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr m_pubDepth;
-    rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr m_pubGray;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr m_pubCloud[ROYALE_ROS_MAX_STREAMS];
+    rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr m_pubDepth[ROYALE_ROS_MAX_STREAMS];
+    rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr m_pubGray[ROYALE_ROS_MAX_STREAMS];
 
     // Interface to configure actual camera
     std::unique_ptr<royale::ICameraDevice> m_cameraDevice;
@@ -80,18 +85,22 @@ class CameraNode : public rclcpp::Node,
     rclcpp::Subscription<rcl_interfaces::msg::ParameterEvent>::SharedPtr m_onSetParametersEventCbHandle;
     rclcpp::SyncParametersClient m_parametersClient;
 
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr m_procParamsSubscription[ROYALE_ROS_MAX_STREAMS];
+
     // Parameters
     std::string m_serial;
     std::string m_model;
     std::string m_currentUseCase;
-    int64_t m_exposureTime;
-    bool m_isAutoExposureEnabled;
+    int64_t m_exposureTime[ROYALE_ROS_MAX_STREAMS];
+    bool m_isAutoExposureEnabled[ROYALE_ROS_MAX_STREAMS];
     bool m_isPubCloud;
     bool m_isPubDepth;
     bool m_isPubGray;
     bool m_registeredPCListener;
     bool m_registeredIRListener;
     rclcpp::TimerBase::SharedPtr m_updateDataListenersTimer;
+    std::map<royale::StreamId, uint32_t> m_streamIdx;
+    std::string m_recording_file;
 };
 
 } // namespace pmd_royale_ros_driver

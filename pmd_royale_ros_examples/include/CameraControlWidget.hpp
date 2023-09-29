@@ -23,6 +23,9 @@
 #include <pluginlib/class_list_macros.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rviz_common/panel.hpp>
+#include <std_msgs/msg/string.hpp>
+
+#define ROYALE_ROS_MAX_STREAMS 2u
 
 namespace pmd_royale_ros_examples {
 
@@ -34,21 +37,25 @@ class CameraControlWidget : public QWidget, public CameraParametersClient {
 
   private Q_SLOTS:
     void setUseCase(const QString &currentMode);
-    void setExposureTime(int value);
-    void setExposureMode(bool isAutomatic);
+    void setExposureTime(int value, uint32_t streamIdx);
+    void setExposureMode(bool isAutomatic, uint32_t streamIdx);
+    void setProcParameter(uint32_t streamIdx);
 
     // The precise value can be entered directly via the text editor.
-    void preciseExposureTimeSetting();
+    void preciseExposureTimeSetting(uint32_t streamIdx);
 
   private:
     virtual void onNewCameraParameter(const CameraParameter &cameraParam) override;
 
     QComboBox *m_comboBoxUseCases;
-    QLabel *m_labelExpoTime;
-    QSlider *m_sliderExpoTime;
-    QLineEdit *m_lineEditExpoTime;
-    QCheckBox *m_checkBoxAutoExpo;
+    QLabel *m_labelExpoTime[ROYALE_ROS_MAX_STREAMS];
+    QSlider *m_sliderExpoTime[ROYALE_ROS_MAX_STREAMS];
+    QLineEdit *m_lineEditExpoTime[ROYALE_ROS_MAX_STREAMS];
+    QCheckBox *m_checkBoxAutoExpo[ROYALE_ROS_MAX_STREAMS];
+    QLineEdit *m_lineEditParams[ROYALE_ROS_MAX_STREAMS];
     rclcpp::Node::SharedPtr m_nh;
+
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr m_pubParameters[ROYALE_ROS_MAX_STREAMS];
 };
 
 } // namespace pmd_royale_ros_examples
