@@ -37,7 +37,9 @@ void CameraParametersClient::onParametersDescriptorResult(
 
 void CameraParametersClient::onParametersResult(std::shared_future<std::vector<rclcpp::Parameter>> future) {
     auto result = future.get();
+    std::cout << "result from future: " << result << std::endl;
     for (auto &param : result) {
+        std::cout << "param name: " << param.get_name();
         if (m_subsribedParameters.find(param.get_name()) != m_subsribedParameters.end() &&
             param.get_type() != rclcpp::PARAMETER_NOT_SET) {
             auto &cameraParameter = m_parameters[param.get_name()];
@@ -87,13 +89,22 @@ void CameraParametersClient::onParameterEvent(const rcl_interfaces::msg::Paramet
 }
 
 void CameraParametersClient::subscribeForCameraParameters(const std::set<std::string> &parameterNames) {
+    std::cout << "Inside subscribe for camera Parameters, got these parameters: ";
+    for (auto p : parameterNames){
+        std::cout << p << ", ";
+    }
+    std::cout << " " << std::endl;
     std::set<std::string> newParameters;
     std::set_union(m_subsribedParameters.begin(), m_subsribedParameters.end(), parameterNames.begin(),
                    parameterNames.end(), std::inserter(newParameters, newParameters.begin()));
     m_subsribedParameters = newParameters;
     std::vector<std::string> parameters(m_subsribedParameters.begin(), m_subsribedParameters.end());
-    m_parametersClient->get_parameters(
-        parameters, std::bind(&CameraParametersClient::onParametersResult, this, std::placeholders::_1));
+    std::cout << "Final parameters vector, got these parameters: ";
+    for (auto p : parameters){
+        std::cout << p << ", ";
+    }
+    std::cout << " " << std::endl;
+    m_parametersClient->get_parameters(parameters, std::bind(&CameraParametersClient::onParametersResult, this, std::placeholders::_1));
 }
 
 void CameraParametersClient::setParameter(const rclcpp::Parameter &parameter) {

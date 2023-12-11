@@ -32,7 +32,7 @@ class PMDRoyaleRVIZ : public rviz_common::Panel {
     ~PMDRoyaleRVIZ();
 
   private Q_SLOTS:
-    void handleCameraNodeSetting();
+    void chooseCamera(int idx);
     virtual void load(const rviz_common::Config &config) override;
     virtual void save(rviz_common::Config config) const override;
 
@@ -40,9 +40,9 @@ class PMDRoyaleRVIZ : public rviz_common::Panel {
     void init();
     void spin();
 
+    QComboBox *m_cams;
     QString m_cameraNode;
     QLabel *m_labelCameraNode;
-    QLineEdit *m_lineEditCameraNode;
     CameraControlWidget *m_cameraControlWidget;
     CameraInfoWidget *m_cameraInfoWidget;
     QTabWidget *m_tabWidget;

@@ -26,6 +26,7 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options)
       m_isPubGray(false),
       m_registeredPCListener(false),
       m_registeredIRListener(false),
+      m_startUseCase(""),
       m_recording_file("") {
 
     unsigned int major;
@@ -41,8 +42,8 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options)
     this->declare_parameter("serial", "", serialParameterDescriptor);
 
     rcl_interfaces::msg::ParameterDescriptor accessCodeParameterDescriptor;
-    serialParameterDescriptor.name = "access_code";
-    serialParameterDescriptor.description = "Access code for Royale.";
+    accessCodeParameterDescriptor.name = "access_code";
+    accessCodeParameterDescriptor.description = "Access code for Royale.";
     this->declare_parameter("access_code", "", accessCodeParameterDescriptor);
 
     auto accessCode = this->get_parameter("access_code").as_string();
@@ -50,6 +51,17 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options)
     if (!accessCode.empty()) {
         RCLCPP_INFO(this->get_logger(), "Using access code : %s", accessCode.c_str());
     }
+
+    rcl_interfaces::msg::ParameterDescriptor startUseCaseParameterDescriptor;
+    startUseCaseParameterDescriptor.name = "startUseCase";
+    startUseCaseParameterDescriptor.description = "Start Usecase.";
+    this->declare_parameter("startUseCase", "", startUseCaseParameterDescriptor);
+
+    auto startUsecase = this->get_parameter("startUseCase").as_string();
+
+    if(!startUsecase.empty()){
+        RCLCPP_INFO(this->get_logger(), "Using Usecase: %s", startUsecase.c_str());
+    }    
 
     rcl_interfaces::msg::ParameterDescriptor recFileParameterDescriptor;
     recFileParameterDescriptor.name = "recording_file";
@@ -73,6 +85,9 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options)
     }
     m_serial = this->get_parameter("serial").as_string();
 
+    int numCamsConnected = cameraList.size(); 
+    RCLCPP_INFO(this->get_logger(), "%d cameras found!", numCamsConnected);
+
     m_cameraDevice = manager.createCamera(m_serial);
     if (m_cameraDevice) {
         RCLCPP_INFO(this->get_logger(), "Connected camera serial : %s", m_serial.c_str());
@@ -81,7 +96,7 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options)
         return;
     }
 
-    if (m_cameraDevice->initialize() != CameraStatus::SUCCESS) {
+    if (m_cameraDevice->initialize(m_startUseCase) != CameraStatus::SUCCESS) {
         RCLCPP_ERROR(this->get_logger(), "Error initializing the camera!");
         return;
     }
@@ -194,6 +209,8 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options)
     m_updateDataListenersTimer->call();
 
     std::string nodeName = this->get_name();
+    std::replace(nodeName.begin(), nodeName.end(), '-', '_');
+    RCLCPP_INFO(this->get_logger(), "Nodename : %s", nodeName.c_str());
 
     // Advertise our point cloud topic and image topics
     m_pubCameraInfo = this->create_publisher<sensor_msgs::msg::CameraInfo>(
@@ -250,7 +267,7 @@ void CameraNode::onNewData(const royale::PointCloud *data) {
     auto curIdx = m_streamIdx[data->streamId];
 
     std_msgs::msg::Header header;
-    header.frame_id = string(this->get_name()) + "_optical_frame";
+    header.frame_id = "pmd_royale_ros_camera_node_optical_frame";
     header.stamp = rclcpp::Time(
         (chrono::duration_cast<chrono::nanoseconds>(chrono::microseconds(data->timestamp))).count());
 
@@ -312,7 +329,7 @@ void CameraNode::onNewData(const royale::IRImage *data) {
     auto curIdx = m_streamIdx[data->streamId];
 
     std_msgs::msg::Header header;
-    header.frame_id = string(this->get_name()) + "_optical_frame";
+    header.frame_id = "pmd_royale_ros_camera_node_optical_frame";
     header.stamp = rclcpp::Time(
         (chrono::duration_cast<chrono::nanoseconds>(chrono::microseconds(data->timestamp))).count());
 

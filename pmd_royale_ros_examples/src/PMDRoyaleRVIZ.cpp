@@ -11,8 +11,10 @@
 #include "PMDRoyaleRVIZ.hpp"
 
 #include <QHBoxLayout>
+#include <QScrollArea>
 #include <QString>
 #include <functional>
+#include <QVBoxLayout>
 
 using namespace std::chrono_literals;
 
@@ -20,19 +22,26 @@ namespace pmd_royale_ros_examples {
 
 PMDRoyaleRVIZ::PMDRoyaleRVIZ(QWidget *parent)
     : rviz_common::Panel(parent),
-      m_cameraNode("/pmd_royale_ros_camera_node"),
       m_nh(rclcpp::Node::make_shared("PMDRoyaleRVIZ")) {
+
+    m_cameraNode = QString::fromStdString("");
+    std::set<std::string> cameras;
+
+    auto node_names = m_nh->get_node_names();
+    for (const auto& node : node_names){
+        if(node.find("pmd_camera_") != std::string::npos){
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Available Camera : %s", node.c_str());
+            m_cameraNode = QString::fromStdString(node);
+            cameras.emplace(node);
+        }
+    }
+    RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Selected camera : %s", m_cameraNode.toStdString().c_str());
+    
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
+    mainLayout->setSizeConstraint(QLayout::SetMinimumSize);
 
     // Top section to specify camera node name
     QVBoxLayout *topLayout = new QVBoxLayout();
-    QHBoxLayout *cameraNodeLayout = new QHBoxLayout();
-    m_labelCameraNode = new QLabel("Camera Node: ", this);
-    m_lineEditCameraNode = new QLineEdit(m_cameraNode, this);
-    cameraNodeLayout->addWidget(m_labelCameraNode);
-    cameraNodeLayout->addWidget(m_lineEditCameraNode);
-    connect(m_lineEditCameraNode, SIGNAL(editingFinished()), this, SLOT(handleCameraNodeSetting()));
-    topLayout->addLayout(cameraNodeLayout);
     mainLayout->addLayout(topLayout);
 
     // Bottom section for camera info and controls
@@ -40,6 +49,18 @@ PMDRoyaleRVIZ::PMDRoyaleRVIZ(QWidget *parent)
     m_tabWidget = new QTabWidget(this);
     bottomLayout->addWidget(m_tabWidget);
     mainLayout->addLayout(bottomLayout);
+
+    // Camera
+    topLayout->addWidget(new QLabel("Camera:"));
+    m_cams = new QComboBox;
+
+    for (auto curCam : cameras) {
+        m_cams->addItem(curCam.c_str());
+    }
+    topLayout->addWidget(m_cams);
+
+    connect(m_cams, SIGNAL(currentIndexChanged(int)), this, SLOT(chooseCamera(int)));
+    m_cams->currentIndexChanged(0);
 
     init();
 
@@ -51,10 +72,11 @@ PMDRoyaleRVIZ::~PMDRoyaleRVIZ() {
     m_thread.join();
 }
 
-void PMDRoyaleRVIZ::handleCameraNodeSetting() {
-    auto cameraName = m_lineEditCameraNode->text().toStdString();
+void PMDRoyaleRVIZ::chooseCamera(int idx) {
+    auto cameraName = m_cams->itemText(idx).toStdString();
     if (cameraName != m_cameraNode.toStdString()) {
         m_cameraNode = QString::fromStdString(cameraName);
+        std::cout << "Chose Camera: " << cameraName << std::endl;
         init();
     }
 }
@@ -82,7 +104,7 @@ void PMDRoyaleRVIZ::spin() {
 void PMDRoyaleRVIZ::load(const rviz_common::Config &config) {
     rviz_common::Panel::load(config);
     if (config.mapGetString("camera_node", &m_cameraNode)) {
-        m_lineEditCameraNode->setText(m_cameraNode);
+        m_cams->setCurrentIndex(m_cams->findText(m_cameraNode));
         init();
     }
 }

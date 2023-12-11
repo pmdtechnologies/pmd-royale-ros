@@ -9,6 +9,8 @@
 # ****************************************************************************/
 
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration, TextSubstitution
 from launch_ros.actions import Node
 from launch_ros.actions import ComposableNodeContainer
 from launch_ros.descriptions import ComposableNode
@@ -19,6 +21,11 @@ def generate_launch_description():
     pmd_royale_ros_examples_path = get_package_share_directory('pmd_royale_ros_examples')
     print('[info]: pmd_royale_ros_examples_path={:s}'.format(pmd_royale_ros_examples_path))
     rviz_config = join(pmd_royale_ros_examples_path,'rviz', 'PMDRoyaleRVIZ.rviz')
+    nodeName_arg = DeclareLaunchArgument("nodeName", default_value="node")
+    fullNodeName = ['pmd_camera_', LaunchConfiguration("nodeName")]
+    pointcloudTopic = ["/", fullNodeName, "/point_cloud_0"]
+    grayimageTopic = ["/", fullNodeName, "/gray_image_0"]
+    depthimageTopic = ["/", fullNodeName, "/depth_image_0"]
 
     container = ComposableNodeContainer(
         name='pmd_royale_ros_camera_node_container',
@@ -45,7 +52,7 @@ def generate_launch_description():
             ComposableNode(
                 package='pmd_royale_ros_driver',
                 plugin='pmd_royale_ros_driver::CameraNode',
-                name='pmd_royale_ros_camera_node',
+                name = fullNodeName,
                 parameters=[{
                     # # Uncomment below to set specific parameters
                     # 'serial' : '8230-93AE-1FA8-283C',
@@ -64,6 +71,10 @@ def generate_launch_description():
         package='rviz2',
         executable='rviz2',
         output='screen',
-        arguments=['-d', rviz_config])
-    return LaunchDescription([container, rviz_node])
+        parameters=[{"pointcloudTopic": pointcloudTopic,
+                     "grayimageTopic": grayimageTopic,
+                     "depthimageTopic": depthimageTopic}],
+        arguments=['-d', rviz_config],
+    )
+    return LaunchDescription([nodeName_arg, container, rviz_node])
 

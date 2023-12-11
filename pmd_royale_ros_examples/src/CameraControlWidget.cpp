@@ -16,14 +16,14 @@ namespace pmd_royale_ros_examples {
 
 CameraControlWidget::CameraControlWidget(std::shared_ptr<rclcpp::Node> node, std::string cameraNodeName,
                                          QWidget *parent)
-    : QWidget(parent), CameraParametersClient(node, cameraNodeName), m_nh(node) {
+    : QWidget(parent), CameraParametersClient(node, cameraNodeName), m_nh(node), m_isInit(false) {
     QVBoxLayout *controlLayout = new QVBoxLayout(this);
+
     // Use Case
     controlLayout->addWidget(new QLabel("Use Case:"));
     m_comboBoxUseCases = new QComboBox;
     controlLayout->addWidget(m_comboBoxUseCases);
 
-    connect(m_comboBoxUseCases, SIGNAL(currentTextChanged(const QString)), this, SLOT(setUseCase(const QString)));
     connect(m_comboBoxUseCases, SIGNAL(currentTextChanged(const QString)), this, SLOT(setUseCase(const QString)));
 
     for (auto i = 0u; i < ROYALE_ROS_MAX_STREAMS; ++i) {
@@ -61,9 +61,10 @@ CameraControlWidget::CameraControlWidget(std::shared_ptr<rclcpp::Node> node, std
         connect(m_checkBoxAutoExpo[i], &QCheckBox::toggled, this, [this, i](bool val) { setExposureMode(val, i); });
         connect(m_lineEditExpoTime[i], &QLineEdit::editingFinished, this, [this, i](void) { preciseExposureTimeSetting(i); });
         connect(m_lineEditParams[i], &QLineEdit::editingFinished, this, [this, i](void) { setProcParameter(i); });
+        
     }
-    subscribeForCameraParameters({"available_usecases", "usecase",
-                                  "gray_image_divisor", "min_distance_filter", "max_distance_filter"});
+    subscribeForCameraParameters({"available_usecases", "usecase"});
+    std::cout << "subscribed for control parameters " << std::endl;
     for (auto i = 0u; i < ROYALE_ROS_MAX_STREAMS; ++i) {
         subscribeForCameraParameters({"exposure_time_" + std::to_string(i), "auto_exposure_" + std::to_string(i)});
         m_pubParameters[i] = m_nh->create_publisher<std_msgs::msg::String>(
@@ -76,7 +77,7 @@ CameraControlWidget::~CameraControlWidget() {}
 void CameraControlWidget::onNewCameraParameter(const CameraParameter &cameraParam) {
     auto param = cameraParam.parameter;
     auto descriptor = cameraParam.descriptor;
-
+    std::cout << "parameter: " << param->get_name() << std::endl;
     if (param->get_name() == "available_usecases") {
         std::vector<std::string> availableUseCases = param->as_string_array();
         m_comboBoxUseCases->blockSignals(true);
@@ -145,5 +146,4 @@ void CameraControlWidget::setProcParameter(uint32_t streamIdx) {
         m_pubParameters[streamIdx]->publish(msg);
     }
 }
-
 } // namespace pmd_royale_ros_examples

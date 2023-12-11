@@ -9,12 +9,17 @@
 # ****************************************************************************/
 
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration, TextSubstitution
 from launch_ros.actions import ComposableNodeContainer
 from launch_ros.descriptions import ComposableNode
 
 def generate_launch_description():
+    nodeName_arg = DeclareLaunchArgument("nodeName", default_value="node")
+    fullNodeName = ['pmd_camera_', LaunchConfiguration("nodeName")]
+
     container = ComposableNodeContainer(
-        name='pmd_royale_ros_camera_node_container',
+        name='pmd_royale_ros_camera_node_containerX',
         namespace='',
         package='rclcpp_components',
         executable='component_container',
@@ -35,7 +40,7 @@ def generate_launch_description():
             ComposableNode(
                 package='pmd_royale_ros_driver',
                 plugin='pmd_royale_ros_driver::CameraNode',
-                name='pmd_royale_ros_camera_node',
+                name = fullNodeName,
                 parameters=[{
                     # # Uncomment below to set specific parameters
                     # 'serial' : '8230-93AE-1FA8-283C',
@@ -49,4 +54,4 @@ def generate_launch_description():
         output='screen',
     )
 
-    return LaunchDescription([container])
+    return LaunchDescription([nodeName_arg, container])
