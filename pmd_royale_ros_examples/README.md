@@ -25,3 +25,23 @@ specific Flexx2 camera, you must modify the ```serial``` parameter in ```config/
 ```
 ros2 launch pmd_royale_ros_examples flexx2_rviz.launch.py
 ```
+
+### Launch multiple camera nodes and rviz
+It is possible to launch multiple camera nodes and work with them in the same rviz window. For this we assign a node name to each launched camera node.
+
+Assuming you have n cameras, you will launch the first n-1 cameras like this:
+
+```
+ros2 launch pmd_royale_ros_examples any_camera.launch.py nodeName:=<NAME_OF_NODE>
+```
+
+The last camera will also launch rviz:
+```
+ros2 launch pmd_royale_ros_examples any_camera_rviz.launch.py nodeName:=<NAME_OF_LAST_NODE>
+```
+
+It is important to launch rviz with the last camera, because else it won't update 
+for any cameras that are launched later. When you launch rviz the panel loads all 
+camera nodes that are currently running. 
+
+The rviz panel shows the images and pointcloud of the node named `node`, so if you change the node name for all of your nodes, you will have to set the correct image and pointcloud topics yourself. The same holds for switching between cameras. The whole upper part of the rviz window won't update automatically. Only the lower part with the `Control` and `Info` tabs does this. 
